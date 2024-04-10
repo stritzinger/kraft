@@ -79,8 +79,10 @@ websocket_init(#{conn := Conn} = State0) ->
 
 websocket_handle(pong, #{ping := #{}} = State0) ->
     {[], State0};
-websocket_handle(Frame, State0) ->
-    module(handle, [Frame], State0).
+websocket_handle({text, _} = Frame, State0) ->
+    module(handle, [Frame], State0);
+websocket_handle(_, State0) ->
+    {[], State0}.
 
 websocket_info('$kraft_ws_ping', State0) ->
     State1 = trigger_ping(State0),
