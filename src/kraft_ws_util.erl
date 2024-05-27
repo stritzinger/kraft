@@ -99,7 +99,7 @@ terminate(Reason, Req, State0) ->
 
 %--- Internal ------------------------------------------------------------------
 
-default_opts() -> #{type => raw, ping => #{interval => 30_000}}.
+default_opts() -> #{type => raw, ping => #{interval => 30_000}, pong => #{timeout => 1_000}}.
 
 callback_module(#{type := raw}) -> kraft_ws;
 callback_module(#{type := json}) -> kraft_ws_json;
