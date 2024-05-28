@@ -84,6 +84,9 @@ websocket_init(#{conn := Conn} = State0) ->
 
 websocket_handle({text, _} = Frame, State0) ->
     module(handle, [Frame], State0);
+websocket_handle(pong, State0) ->
+    State1 = cancel_pong_timeout(State0),
+    {[], State1};
 websocket_handle(Pong, State0) when
     element(1, Pong) =:= pong
 ->
@@ -113,7 +116,9 @@ terminate(Reason, Req, State0) ->
 
 %--- Internal ------------------------------------------------------------------
 
-default_opts() -> #{type => raw, ping => #{interval => 30_000}}.
+default_opts() -> #{type => raw,
+                    ping => #{interval => 30_000},
+                    pong => #{timeout => 1_000}}.
 
 callback_module(#{type := raw}) -> kraft_ws;
 callback_module(#{type := json}) -> kraft_ws_json;
