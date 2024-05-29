@@ -82,13 +82,15 @@ websocket_init(#{conn := Conn} = State0) ->
     State1 = trigger_ping(State0),
     module(init, [Conn], State1).
 
-websocket_handle(pong, #{ping := #{}} = State0) ->
-    {[], State0};
 websocket_handle({text, _} = Frame, State0) ->
     module(handle, [Frame], State0);
-websocket_handle(Frame, State0) when
-    element(1, Frame) =:= ping;
-    element(1, Frame) =:= pong
+websocket_handle(Pong, State0) when
+    Pong =:= pong; element(1, Pong) =:= pong
+->
+    State1 = cancel_pong_timeout(State0),
+    {[], State1};
+websocket_handle(Ping, State0) when
+    Ping =:= ping; element(1, Ping) =:= ping
 ->
     {[], State0};
 websocket_handle(Frame, State0) ->
@@ -96,19 +98,24 @@ websocket_handle(Frame, State0) ->
     {[], State0}.
 
 websocket_info('$kraft_ws_ping', State0) ->
-    State1 = trigger_ping(State0),
+    State1 = trigger_pong_timeout(trigger_ping(State0)),
     {[ping], State1};
+websocket_info('$kraft_ws_pong_timeout', State0) ->
+    {[{close, 1011, <<"timeout waiting for pong">>}], State0};
 websocket_info(Info, State0) ->
     module(info, [Info], State0).
 
 terminate(Reason, Req, State0) ->
     cancel_ping(State0),
+    cancel_pong_timeout(State0),
     module(terminate, [Reason, Req], State0),
     ok.
 
 %--- Internal ------------------------------------------------------------------
 
-default_opts() -> #{type => raw, ping => #{interval => 30_000}}.
+default_opts() -> #{type => raw,
+                    ping => #{interval => 30_000},
+                    pong => #{timeout => 1_000}}.
 
 callback_module(#{type := raw}) -> kraft_ws;
 callback_module(#{type := json}) -> kraft_ws_json;
@@ -127,10 +134,32 @@ trigger_ping(State0) ->
         ping => #{target => erlang:monotonic_time(millisecond)}
     }).
 
+trigger_pong_timeout(#{opts := #{ping := disabled}} = State0) ->
+    State0;
+trigger_pong_timeout(#{opts := #{pong := #{timeout := infinity}}} = State0) ->
+    State0;
+trigger_pong_timeout(#{pong := #{timer := Ref}} = State0) when
+    Ref =/= undefined
+->
+    % do not start a second timeout
+    State0;
+trigger_pong_timeout(State0) ->
+    #{opts := #{pong := #{timeout := Timeout}}} = State0,
+    Ref = erlang:send_after(Timeout, self(), '$kraft_ws_pong_timeout'),
+    mapz:deep_merge(State0, #{pong => #{timer => Ref}}).
+
 cancel_ping(#{ping := #{timer := Ref} = Ping} = State0) ->
     erlang:cancel_timer(Ref, [{info, false}]),
     State0#{ping => Ping#{timer => undefined}};
 cancel_ping(State0) ->
+    State0.
+
+cancel_pong_timeout(#{pong := #{timer := Ref} = Pong} = State0) when
+    Ref =/= undefined
+->
+    erlang:cancel_timer(Ref, [{info, false}]),
+    State0#{pong => Pong#{timer := undefined}};
+cancel_pong_timeout(State0) ->
     State0.
 
 module(Func, Args, #{module := Module} = State0) ->

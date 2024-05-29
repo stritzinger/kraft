@@ -14,7 +14,8 @@ start(_StartType, _StartArgs) ->
         {"/json/ws", {ws, ws_json}, #{}, #{type => json, ping => disabled}},
         {"/jsonrpc/ws", {ws, ws_jsonrpc}, #{}, #{
             type => json_rpc,
-            ping => #{interval => 5_000}
+            ping => #{interval => 3_000},
+            pong => #{timeout => 1_000}
         }},
         {"/", kraft_static, #{}}
     ]),
