@@ -44,14 +44,25 @@ init(#{app := App, owner := Owner, opts := #{port := Port} = Opts} = Params) ->
 
     % Start Cowboy
     ListenerName = listener_name(App),
-    ProtocolOpts = #{
+    StreamHandlers = [kraft_fallback_h, cowboy_compress_h, cowboy_stream_h],
+    ProtocolOpts0 = #{
         env => #{dispatch => {persistent_term, DispatchKey}},
-        stream_handlers => [
-            kraft_fallback_h,
-            cowboy_compress_h,
-            cowboy_stream_h
-        ]
+        stream_handlers => StreamHandlers
     },
+    ProtocolOpts =
+        case application:get_env(kraft, opentelemetry, false) of
+            false ->
+                ProtocolOpts0;
+            _ ->
+                ProtocolOpts0#{
+                    stream_handlers => [
+                        cowboy_telemetry_h, kraft_otel_context | StreamHandlers
+                    ],
+                    middlewares => [
+                        kraft_otel_context, cowboy_router, cowboy_handler
+                    ]
+                }
+        end,
     {ok, Listener} =
         case Opts of
             #{ssl_opts := SslOpts} ->

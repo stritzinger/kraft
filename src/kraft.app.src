@@ -12,6 +12,7 @@
         mapz
     ]},
     {env, [
+        {opentelemetry, false},
         {cache, #{
             template =>
                 {kraft_cache_ets, #{
